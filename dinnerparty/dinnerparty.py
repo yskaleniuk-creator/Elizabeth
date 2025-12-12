@@ -1,6 +1,12 @@
 import random
 
-num_friends = int(input("Enter the number of friends joining (including you):\n> "))
+# --- Безопасный ввод количества друзей ---
+while True:
+    try:
+        num_friends = int(input("Enter the number of friends joining (including you):\n> "))
+        break
+    except ValueError:
+        print("Please enter a valid integer.")
 
 if num_friends <= 0:
     print("No one is joining for the party")
@@ -12,7 +18,14 @@ else:
         name = input()
         friends[name] = 0
 
-    total_amount = float(input("Enter the total amount:\n> "))
+    # --- Безопасный ввод суммы ---
+    while True:
+        try:
+            total_amount = float(input("Enter the total amount:\n> "))
+            break
+        except ValueError:
+            print("Please enter a valid number.")
+
     split_amount = round(total_amount / num_friends, 2)
 
     for friend in friends:
