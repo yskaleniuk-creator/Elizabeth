@@ -1,129 +1,113 @@
-class SimplifiedMarkdownEditor:
+class MarkdownGenerator:
     def __init__(self):
-        self.result = ""
-        self.formatters = {
-            "plain",
-            "bold",
-            "italic",
-            "header",
-            "link",
-            "inline-code",
-            "ordered-list",
-            "unordered-list",
-            "new-line"
+        self.doc_content = ""
+        # Список доступных форматов
+        self.tags = {
+            "plain", "bold", "italic", "header", "link",
+            "inline-code", "ordered-list", "unordered-list", "new-line"
         }
-        self.special_commands = {"!help", "!done", "exit"}
+        # Управляющие команды
+        self.control_cmds = {"!help", "!done", "exit"}
 
-    def print_help(self):
-        print("Available formatters: plain bold italic header link inline-code "
-              "ordered-list unordered-list new-line")
-        print("Special commands: !help !done")
+    def print_manual(self):
+        print("Список доступных тегов: " + ", ".join(self.tags))
+        print("Команды управления: !help — справка, !done — сохранить результат")
 
-    def get_rows(self):
+    def _get_row_number(self):
         while True:
             try:
-                rows = int(input("Number of rows: > "))
-                if rows <= 0:
-                    print("The number of rows should be greater than zero")
-                else:
-                    return rows
+                amount = int(input("Сколько строк добавить? "))
+                if amount > 0:
+                    return amount
+                print("Введите число больше нуля.")
             except ValueError:
-                print("The number of rows should be greater than zero")
+                print("Ошибка: требуется целое число.")
 
-    def run(self):
-        print("Hi User! This is Simplified Markdown_Editor.\n"
-             "Formatter: plain, bold, italic ,header, link, inline-code, ordered-list, unordered-list, new-line.\n"
-              "Special commands: !help, !done, exit.")
+    def run_engine(self):
+        print("--- Система подготовки Markdown-файлов активирована ---")
+        print("Используйте !help для просмотра опций или exit для отмены.")
+
         while True:
-            formatter = input("Choose a formatter:\n> ")
+            selection = input("\nВыберите формат или действие: ").strip().lower()
 
-            if formatter in self.special_commands:
-                if formatter == "!help":
-                    self.print_help()
-                elif formatter == "!done":
-                    with open("output.md", "w", encoding="utf-8") as f:
-                        f.write(self.result)
-                    print("Markdown saved to output.md. Exiting.")
+            if selection in self.control_cmds:
+                if selection == "!help":
+                    self.print_manual()
+                elif selection == "!done":
+                    with open("output.md", "w", encoding="utf-8") as target_file:
+                        target_file.write(self.doc_content)
+                    print("Файл output.md успешно сгенерирован. Программа завершена.")
                     break
-                elif formatter == "exit":
-                    print("Exiting without saving.")
+                elif selection == "exit":
+                    print("Работа завершена без записи данных.")
                     break
                 continue
 
-            if formatter not in self.formatters:
-                print("Unknown formatting type or command")
+            if selection not in self.tags:
+                print("Такого формата не существует. Попробуйте снова.")
                 continue
 
-            if formatter == "plain":
-                text = input("Text: > ")
-                self.result += text
+            # Обработка различных типов разметки
+            if selection == "plain":
+                text_input = input("Текст: ")
+                self.doc_content += text_input
 
-            elif formatter == "bold":
-                text = input("Text: > ")
-                self.result += f"**{text}**"
+            elif selection == "bold":
+                text_input = input("Жирный текст: ")
+                self.doc_content += f"**{text_input}**"
 
-            elif formatter == "italic":
-                text = input("Text: > ")
-                self.result += f"*{text}*"
+            elif selection == "italic":
+                text_input = input("Курсивный текст: ")
+                self.doc_content += f"*{text_input}*"
 
-            elif formatter == "inline-code":
-                text = input("Text: > ")
-                self.result += f"`{text}`"
+            elif selection == "inline-code":
+                text_input = input("Код в строке: ")
+                self.doc_content += f"`{text_input}`"
 
-            elif formatter == "header":
+            elif selection == "header":
                 while True:
                     try:
-                        level = int(input("Level: > "))
-                        if 1 <= level <= 6:
+                        priority = int(input("Приоритет заголовка (1-6): "))
+                        if 1 <= priority <= 6:
                             break
-                        else:
-                            print("The level should be within the range of 1 to 6")
+                        print("Допустимы значения только от 1 до 6.")
                     except ValueError:
-                        print("The level should be within the range of 1 to 6")
-                text = input("Text: > ")
-                self.result += f"{'#' * level} {text}\n"
+                        print("Нужно ввести цифру.")
+                text_input = input("Заголовок: ")
+                self.doc_content += f"{'#' * priority} {text_input}\n"
 
-            elif formatter == "link":
-                label = input("Label: > ")
-                url = input("URL: > ")
-                self.result += f"[{label}]({url})"
+            elif selection == "link":
+                title = input("Текст ссылки: ")
+                address = input("Адрес (URL): ")
+                self.doc_content += f"[{title}]({address})"
 
-
-            elif formatter == "new-line":
-                if self.result.endswith("\n\n"):
+            elif selection == "new-line":
+                if self.doc_content.endswith("\n\n"):
                     pass
-                elif self.result.endswith("\n"):
-                    self.result += "\n"
+                elif self.doc_content.endswith("\n"):
+                    self.doc_content += "\n"
                 else:
-                    self.result += "\n\n"
+                    self.doc_content += "\n\n"
 
-            elif formatter == "ordered-list":
-                rows = self.get_rows()
-                if self.result and not self.result.endswith("\n"):
-                    self.result += "\n"
+            elif selection in ("ordered-list", "unordered-list"):
+                total_items = self._get_row_number()
+                if self.doc_content and not self.doc_content.endswith("\n"):
+                    self.doc_content += "\n"
 
-                for i in range(1, rows + 1):
-                    row = input(f"Row #{i}: > ")
-                    self.result += f"{i}. {row}\n"
-                self.result += "\n"
+                for step in range(1, total_items + 1):
+                    item_text = input(f"Содержимое пункта {step}: ")
+                    if selection == "ordered-list":
+                        self.doc_content += f"{step}. {item_text}\n"
+                    else:
+                        self.doc_content += f"* {item_text}\n"
+                self.doc_content += "\n"
 
-            elif formatter == "unordered-list":
-
-                rows = self.get_rows()
-
-                if self.result and not self.result.endswith("\n"):
-                    self.result += "\n"
-
-                for i in range(1, rows + 1):
-                    row = input(f"Row #{i}: > ")
-
-                    self.result += f"* {row}\n"
-
-                self.result += "\n"
-
-            print(self.result)
+            # Предварительный просмотр
+            print("\n>>> Предварительный просмотр документа:")
+            print(self.doc_content)
+            print(">>> Конец превью")
 
 
 if __name__ == "__main__":
-    editor = SimplifiedMarkdownEditor()
-    editor.run()
+    app = MarkdownGenerator()
+    app.run_engine()
