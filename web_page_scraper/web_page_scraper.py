@@ -1,135 +1,139 @@
 import requests
-from bs4 import BeautifulSoup
-import os
 import string
+import sys
+from bs4 import BeautifulSoup
+from pathlib import Path
 from requests.exceptions import RequestException
 
 
-class NatureScraper:
-    def __init__(self, pages, article_type):
-        self.pages = pages
-        self.article_type = article_type
-        self.base_url = "https://www.nature.com/nature/articles"
+class NatureParser:
+    def __init__(self, pages_limit, article_type):
+        self.limit = pages_limit
+        self.target_kind = article_type
+        self.base_link = "https://www.nature.com/nature/articles"
         self.session = requests.Session()
+        # Кастомный заголовок браузера
         self.session.headers.update({
-            "Accept-Language": "en-US,en;q=0.5",
-            "User-Agent": "Mozilla/5.0"
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+            "Accept": "text/html,application/xhtml+xml"
         })
 
-    def clean_filename(self, title):
-        cleaned = ''.join(char for char in title if char not in string.punctuation)
-        cleaned = cleaned.replace(" ", "_")
-        return cleaned[:150]
+    def _sanitize_filename(self, title):
+        """Превращает заголовок статьи в допустимое имя файла."""
+        allowed = f"-() {string.ascii_letters}{string.digits}"
+        name = ''.join(char for char in title if char in allowed)
+        return name.strip().replace(" ", "_")[:100]
 
-    def safe_request(self, url, params=None):
+    def _get_request(self, url, params=None):
+        """Вспомогательный метод для сетевых запросов."""
         try:
-            response = self.session.get(url, params=params, timeout=10)
+            response = self.session.get(url, params=params, timeout=20)
             response.raise_for_status()
             return response
         except RequestException as e:
-            print(f"[ERROR] Request failed: {url} -> {e}")
+            print(f"Ошибка соединения с {url}: {e}")
             return None
 
-    def get_article_content(self, url):
-        response = self.safe_request(url)
-        if not response:
-            return ""
+    def _parse_article_text(self, url):
+        """Извлекает текст статьи из найденной страницы."""
+        req = self._get_request(url)
+        if not req:
+            return None
 
-        soup = BeautifulSoup(response.text, "html.parser")
+        page_data = BeautifulSoup(req.text, "html.parser")
 
-        selectors = [
+        # Различные варианты верстки для поиска текста
+        content_selectors = [
+            "article.c-article-body",
+            "div.article-item__body",
             "div[itemprop='articleBody']",
-            "div.c-article-body",
-            "div[data-track-component='article body']"
+            "section[data-test='article-body']"
         ]
 
-        for selector in selectors:
-            body = soup.select_one(selector)
-            if body:
-                paragraphs = body.find_all("p")
-                text = "\n".join(p.get_text(strip=True) for p in paragraphs)
+        for selector in content_selectors:
+            box = page_data.select_one(selector)
+            if box:
+                paragraphs = box.find_all("p")
+                text = "\n".join(p.get_text().strip() for p in paragraphs)
                 if text:
                     return text
 
-        teaser = soup.find("p", class_="article__teaser")
-        if teaser:
-            return teaser.get_text(strip=True)
+        # Если основной блок не найден, ищем анонс
+        teaser = page_data.find("p", class_="article__teaser")
+        return teaser.get_text() if teaser else None
 
-        print(f"[WARN] No content found: {url}")
-        return ""
+    def _process_page(self, num):
+        print(f"--- Обработка раздела №{num} ---")
 
-    def process_page(self, page_number):
-        print(f"[INFO] Processing page {page_number}")
-
-        params = {
-            "sort": "PubDate",
+        parameters = {
             "year": "2022",
-            "page": page_number
+            "sort": "PubDate",
+            "page": num
         }
 
-        response = self.safe_request(self.base_url, params=params)
-        if not response:
+        resp = self._get_request(self.base_link, params=parameters)
+        if not resp:
             return
 
-        soup = BeautifulSoup(response.text, "html.parser")
+        web_soup = BeautifulSoup(resp.text, "html.parser")
 
-        folder_name = f"Page_{page_number}"
-        os.makedirs(folder_name, exist_ok=True)
+        # Подготовка папки для текущей страницы
+        folder = Path(f"Page_{num}")
+        folder.mkdir(exist_ok=True)
 
-        articles = soup.find_all("article")
-        if not articles:
-            print(f"[WARN] No articles found on page {page_number}")
+        cards = web_soup.find_all("article")
+        if not cards:
+            print(f"Статьи на странице {num} не обнаружены.")
             return
 
-        for article in articles:
-            type_tag = article.find("span", {"data-test": "article.type"})
-            if not type_tag:
+        for card in cards:
+            # Сверяем тип публикации
+            meta = card.find("span", {"data-test": "article.type"})
+            if not meta or meta.get_text().strip() != self.target_kind:
                 continue
 
-            if type_tag.text.strip() != self.article_type:
+            anchor = card.find("a", {"data-track-action": "view article"})
+            if not anchor:
                 continue
 
-            title_tag = article.find("a", {"data-track-action": "view article"})
-            if not title_tag:
+            header_text = anchor.get_text().strip()
+            web_path = anchor.get("href")
+            full_url = f"https://www.nature.com{web_path}"
+
+            print(f"Загружаю: {header_text[:40]}...")
+
+            article_content = self._parse_article_text(full_url)
+            if not article_content:
                 continue
 
-            title = title_tag.text.strip()
-            article_url = "https://www.nature.com" + title_tag.get("href")
-
-            print(f"[INFO] Fetching: {title}")
-
-            content = self.get_article_content(article_url)
-            if not content:
-                continue
-
-            filename = self.clean_filename(title) + ".txt"
-            file_path = os.path.join(folder_name, filename)
+            safe_name = self._sanitize_filename(header_text) + ".txt"
+            file_path = folder / safe_name
 
             try:
-                with open(file_path, "w", encoding="utf-8") as file:
-                    file.write(content)
-            except OSError as e:
-                print(f"[ERROR] File write failed: {file_path} -> {e}")
+                file_path.write_text(article_content, encoding="utf-8")
+            except IOError as io_err:
+                print(f"Не удалось сохранить файл {safe_name}: {io_err}")
 
     def run(self):
-        for page in range(1, self.pages + 1):
-            self.process_page(page)
-
-        print("\nSaved all articles.")
+        for page_idx in range(1, self.limit + 1):
+            self._process_page(page_idx)
+        print("\nГотово. Все доступные материалы скачаны.")
 
 
 def main():
     while True:
         try:
-            pages = int(input("How many pages?\n> "))
-            break
+            total_pages = int(input("Укажите число страниц для парсинга: "))
+            if total_pages > 0:
+                break
         except ValueError:
-            print("Enter a valid number!")
+            pass
+        print("Пожалуйста, введите корректное число.")
 
-    article_type = input("What article type?\n> ")
+    wanted_type = input("Какую категорию ищем? (например, Research Highlight): ").strip()
 
-    scraper = NatureScraper(pages, article_type)
-    scraper.run()
+    scanner = NatureParser(total_pages, wanted_type)
+    scanner.run()
 
 
 if __name__ == "__main__":
