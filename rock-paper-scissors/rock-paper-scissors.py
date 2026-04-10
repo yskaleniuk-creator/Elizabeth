@@ -1,126 +1,114 @@
 import random
 
 
-class RockPaperScissors:
-    DEFAULT_OPTIONS = ["rock", "paper", "scissors"]
+class RockPaperGame:
+    DEFAULT_ITEMS = ["rock", "paper", "scissors"]
 
-    STATE_WAIT = "WAIT"
-    STATE_PLAY = "PLAY"
-    STATE_EXIT = "EXIT"
+    # Статусы приложения
+    STATUS_WAIT = 0
+    STATUS_PLAY = 1
+    STATUS_OFF = 2
 
-    def __init__(self, rating_file: str = "rating.txt"):
-        self.rating_file = rating_file
-        self.name = ""
-        self.rating = 0
-        self.options = self.DEFAULT_OPTIONS.copy()
-        self.state = self.STATE_WAIT
+    def __init__(self, storage_path: str = "rating.txt"):
+        self.file_name = storage_path
+        self.player_name = ""
+        self.score = 0
+        self.options = self.DEFAULT_ITEMS.copy()
+        self.state = self.STATUS_WAIT
 
-
-    def load_rating(self) -> None:
+    def _load_user_data(self) -> None:
+        """Считывание прогресса из файла."""
         try:
-            with open(self.rating_file, "r") as f:
+            with open(self.file_name, "r", encoding="utf-8") as f:
                 for line in f:
-                    user, value = line.strip().split()
-                    if user == self.name:
-                        self.rating = int(value)
+                    name, val = line.strip().split()
+                    if name == self.player_name:
+                        self.score = int(val)
                         return
-        except FileNotFoundError:
+        except (FileNotFoundError, ValueError):
             pass
-        self.rating = 0
+        self.score = 0
 
     def setup_player(self) -> None:
-        self.name = input("Enter your name:\n> ")
-        print(f"Hello, {self.name}")
-        self.load_rating()
-        self.print_help()
+        self.player_name = input("Введите ваше имя:\n> ").strip()
+        print(f"Добро пожаловать, {self.player_name}!")
+        self._load_user_data()
+        self.show_help()
 
-    def print_help(self):
-        print("Commands:")
-        print("!start  - start game")
-        print("!rating - show rating")
-        print("!exit   - quit")
-        print("Before start you can input custom options separated by command.")
+    def show_help(self):
+        print("Команды управления:")
+        print("!start   - начать поединок")
+        print("!rating  - показать мои очки")
+        print("!exit    - выйти из приложения")
+        print("Чтобы сменить правила, введите свои варианты через запятую (до старта).")
 
-
-    def set_options(self, raw: str) -> None:
-        raw = raw.strip()
-        if raw == "":
-            self.options = self.DEFAULT_OPTIONS.copy()
+    def config_variants(self, text: str) -> None:
+        clean_text = text.strip()
+        if not clean_text:
+            self.options = self.DEFAULT_ITEMS.copy()
         else:
-            self.options = [x.strip() for x in raw.split(",")]
+            self.options = [x.strip() for x in clean_text.split(",")]
+        print("Список жестов успешно изменен.")
 
-
-    def get_computer_choice(self) -> str:
-        return random.choice(self.options)
-
-    def computer_wins(self, user: str, computer: str) -> bool:
-        idx = self.options.index(user)
+    def _check_result(self, user_move: str, bot_move: str) -> bool:
+        """Определяет, проиграл ли человек (логика циклического списка)."""
+        idx = self.options.index(user_move)
+        # Перестраиваем список так, чтобы выбор игрока был в центре
         rotated = self.options[idx + 1:] + self.options[:idx]
+        # Половина списка после выбора игрока — это то, чему он проигрывает
         half = len(rotated) // 2
-        return computer in rotated[:half]
+        return bot_move in rotated[:half]
 
-    def process_round(self, user_choice: str) -> None:
-        computer_choice = self.get_computer_choice()
+    def play_round(self, user_choice: str) -> None:
+        bot_choice = random.choice(self.options)
 
-        if computer_choice == user_choice:
-            print(f"There is a draw ({computer_choice})")
-            self.rating += 50
+        if bot_choice == user_choice:
+            print(f"Ничья! Оба выбрали {bot_choice}")
+            self.score += 50
+        elif self._check_result(user_choice, bot_choice):
+            print(f"Увы, поражение. Бот показал {bot_choice}")
+        else:
+            print(f"Победа! {bot_choice} слабее, чем ваш выбор")
+            self.score += 100
+
+    def _handle_input(self, msg: str):
+        # Глобальные команды
+        if msg == "!exit":
+            print("Выход из игры... До новых встреч!")
+            self.state = self.STATUS_OFF
             return
 
-        if self.computer_wins(user_choice, computer_choice):
-            print(f"Sorry, but the computer chose {computer_choice}")
-        else:
-            print(f"Well done. The computer chose {computer_choice} and failed")
-            self.rating += 100
+        if msg == "!rating":
+            print(f"Ваш счет на данный момент: {self.score}")
+            return
 
+        # Действия в меню
+        if self.state == self.STATUS_WAIT:
+            if msg == "!help":
+                self.show_help()
+            elif msg == "!start":
+                print("Бой начался! Вводите ваш жест.")
+                self.state = self.STATUS_PLAY
+            else:
+                self.config_variants(msg)
 
-    def handle_wait_state(self, user_input: str):
-        if user_input == "!help":
-            self.print_help()
+        # Действия в процессе игры
+        elif self.state == self.STATUS_PLAY:
+            if msg in self.options:
+                self.play_round(msg)
+            else:
+                print("Неизвестный жест. Используйте варианты из списка или !exit.")
 
-        elif user_input == "!rating":
-            print(f"Your rating: {self.rating}")
-
-        elif user_input == "!exit":
-            print("Bye!")
-            self.state = self.STATE_EXIT
-
-        elif user_input == "!start":
-            print("Okay, let's start")
-            self.state = self.STATE_PLAY
-
-        else:
-            self.set_options(user_input)
-            print("Options updated.")
-
-    def handle_play_state(self, user_input: str):
-        if user_input == "!exit":
-            print("Bye!")
-            self.state = self.STATE_EXIT
-
-        elif user_input == "!rating":
-            print(f"Your rating: {self.rating}")
-
-        elif user_input in self.options:
-            self.process_round(user_input)
-
-        else:
-            print("Invalid input")
-
-
-    def run(self):
+    def launch(self):
         self.setup_player()
 
-        while self.state != self.STATE_EXIT:
-            user_input = (input("> ").strip())
-
-            if self.state == self.STATE_WAIT:
-                self.handle_wait_state(user_input)
-            elif self.state == self.STATE_PLAY:
-                self.handle_play_state(user_input)
-
+        while self.state != self.STATUS_OFF:
+            user_msg = input("> ").strip()
+            if not user_msg:
+                continue
+            self._handle_input(user_msg)
 
 
 if __name__ == "__main__":
-    game = RockPaperScissors()
-    game.run()
+    game_instance = RockPaperGame()
+    game_instance.launch()
