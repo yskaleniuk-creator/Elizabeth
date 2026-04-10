@@ -1,174 +1,192 @@
-class Matrix:
-    def __init__(self, data):
-        self.data = data
-        self.rows = len(data)
-        self.cols = len(data[0]) if self.rows > 0 else 0
+class MatrixProcessor:
+    def __init__(self, data_grid):
+        self.grid = data_grid
+        self.rows_cnt = len(data_grid)
+        self.cols_cnt = len(data_grid[0]) if self.rows_cnt > 0 else 0
 
-    def print_matrix(self):
-        for row in self.data:
-            print(' '.join(map(lambda x: str(round(x, 2)), row)))
+    def show_matrix(self):
+        for row in self.grid:
+            # Форматирование вывода: округление до 2 знаков, убираем лишние нули
+            print(' '.join(f"{round(elem, 2):g}" for elem in row))
 
-    def add(self, other):
-        if self.rows != other.rows or self.cols != other.cols:
-            print("ERROR")
+    def add_matrix(self, other):
+        if self.rows_cnt != other.rows_cnt or self.cols_cnt != other.cols_cnt:
+            print("[!] Ошибка: Матрицы должны быть одинакового размера.")
             return None
-        result = [[self.data[i][j] + other.data[i][j] for j in range(self.cols)]
-                  for i in range(self.rows)]
-        return Matrix(result)
 
-    def multiply_constant(self, c):
-        result = [[elem * c for elem in row] for row in self.data]
-        return Matrix(result)
+        sum_res = [[self.grid[y][x] + other.grid[y][x] for x in range(self.cols_cnt)]
+                   for y in range(self.rows_cnt)]
+        return MatrixProcessor(sum_res)
 
-    def multiply_matrix(self, other):
-        if self.cols != other.rows:
-            print("The operation cannot be performed.")
+    def multiply_by_scalar(self, k):
+        scaled_res = [[item * k for item in row] for row in self.grid]
+        return MatrixProcessor(scaled_res)
+
+    def multiply_matrices(self, second_matrix):
+        if self.cols_cnt != second_matrix.rows_cnt:
+            print("[!] Ошибка: Несоответствие размерностей для умножения.")
             return None
-        result = [[sum(self.data[i][k] * other.data[k][j] for k in range(self.cols))
-                   for j in range(other.cols)] for i in range(self.rows)]
-        return Matrix(result)
 
-    def transpose(self, mode=1):
+        # Классическое умножение матриц
+        output = [[sum(self.grid[i][z] * second_matrix.grid[z][j] for z in range(self.cols_cnt))
+                   for j in range(second_matrix.cols_cnt)] for i in range(self.rows_cnt)]
+        return MatrixProcessor(output)
+
+    def apply_rotation(self, mode=1):
         if mode == 1:
-            result = [[self.data[j][i] for j in range(self.rows)] for i in range(self.cols)]
+            # Транспонирование (главная диагональ)
+            transformed = [[self.grid[j][i] for j in range(self.rows_cnt)] for i in range(self.cols_cnt)]
         elif mode == 2:
-            result = [[self.data[self.rows-1-j][self.cols-1-i] for j in range(self.rows)]
-                      for i in range(self.cols)]
+            # Отражение по побочной диагонали
+            transformed = [[self.grid[self.rows_cnt - 1 - j][self.cols_cnt - 1 - i]
+                            for j in range(self.rows_cnt)] for i in range(self.cols_cnt)]
         elif mode == 3:
-            result = [list(reversed(row)) for row in self.data]
+            # Зеркало по вертикали
+            transformed = [line[::-1] for line in self.grid]
         elif mode == 4:
-            result = list(reversed(self.data))
+            # Зеркало по горизонтали
+            transformed = self.grid[::-1]
         else:
-            print("Invalid transpose mode")
+            print("Указанный тип модификации не найден.")
             return None
-        return Matrix(result)
+        return MatrixProcessor(transformed)
 
-    def determinant(self):
-        if self.rows != self.cols:
-            print("Cannot calculate determinant of non-square matrix.")
+    def calculate_determinant(self):
+        if self.rows_cnt != self.cols_cnt:
+            print("[!] Ошибка: Определитель ищется только в квадратных матрицах.")
             return None
-        return self._det_recursive(self.data)
+        return self._recursive_det(self.grid)
 
-    def _det_recursive(self, matrix):
-        n = len(matrix)
+    def _recursive_det(self, current_mtx):
+        n = len(current_mtx)
         if n == 1:
-            return matrix[0][0]
+            return current_mtx[0][0]
         if n == 2:
-            return matrix[0][0]*matrix[1][1] - matrix[0][1]*matrix[1][0]
-        det = 0
-        for c in range(n):
-            minor = [row[:c] + row[c+1:] for row in matrix[1:]]
-            det += ((-1)**c) * matrix[0][c] * self._det_recursive(minor)
-        return det
+            return current_mtx[0][0] * current_mtx[1][1] - current_mtx[0][1] * current_mtx[1][0]
 
-    def inverse(self):
-        det = self.determinant()
-        if det == 0:
-            print("This matrix doesn't have an inverse.")
+        det_value = 0
+        for col_idx in range(n):
+            # Создаем минор
+            minor = [line[:col_idx] + line[col_idx + 1:] for line in current_mtx[1:]]
+            det_value += ((-1) ** col_idx) * current_mtx[0][col_idx] * self._recursive_det(minor)
+        return det_value
+
+    def invert(self):
+        main_det = self.calculate_determinant()
+        if main_det == 0 or main_det is None:
+            print("Матрица вырожденная (Det=0), инверсия невозможна.")
             return None
-        n = self.rows
-        cofactors = []
-        for r in range(n):
-            cofactor_row = []
-            for c in range(n):
-                minor = [row[:c] + row[c+1:] for i, row in enumerate(self.data) if i != r]
-                cofactor_row.append(((-1) ** (r + c)) * self._det_recursive(minor))
-            cofactors.append(cofactor_row)
-        cofactors_T = [[cofactors[j][i] for j in range(n)] for i in range(n)]
-        inv = [[cofactors_T[i][j] / det for j in range(n)] for i in range(n)]
-        return Matrix(inv)
+
+        size = self.rows_cnt
+        complements = []
+        for r in range(size):
+            comp_row = []
+            for c in range(size):
+                # Поиск минора для алгебраического дополнения
+                minor_matrix = [l[:c] + l[c + 1:] for idx, l in enumerate(self.grid) if idx != r]
+                comp_row.append(((-1) ** (r + c)) * self._recursive_det(minor_matrix))
+            complements.append(comp_row)
+
+        # Транспонируем матрицу дополнений и делим на детерминант
+        inverted_grid = [[complements[j][i] / main_det for j in range(size)] for i in range(size)]
+        return MatrixProcessor(inverted_grid)
 
 
-def read_matrix():
+def get_user_matrix():
     while True:
         try:
-            n, m = map(int, input("Enter matrix size (rows cols): > ").split())
+            dims = input("Укажите размерность (строк и столбцов): ").split()
+            rows, cols = map(int, dims)
             break
-        except ValueError:
-            print("Please enter exactly two integers separated by space.")
+        except Exception:
+            print("Некорректный ввод. Нужно два целых числа.")
 
     data = []
-    for i in range(n):
+    print(f"Заполнение данных ({rows} строк):")
+    for i in range(rows):
         while True:
-            row_input = input(f"Enter row {i+1}: > ").split()
-            if len(row_input) != m:
-                print(f"Please enter exactly {m} numbers.")
+            raw_row = input(f"Строка №{i + 1}: ").split()
+            if len(raw_row) != cols:
+                print(f"Нужно ввести {cols} чисел.")
                 continue
             try:
-                row = list(map(float, row_input))
-                data.append(row)
+                data.append([float(x) for x in raw_row])
                 break
             except ValueError:
-                print("Please enter valid numbers.")
-    return Matrix(data)
+                print("Обнаружены нечисловые символы.")
+    return MatrixProcessor(data)
 
-def main():
+
+def start_console_interface():
     while True:
-        print("\n1. Add matrices")
-        print("2. Multiply matrix by a constant")
-        print("3. Multiply matrices")
-        print("4. Transpose matrix")
-        print("5. Calculate a determinant")
-        print("6. Inverse matrix")
-        print("0. Exit")
-        choice = input("Your choice: > ")
+        print("\n--- ГЛАВНОЕ МЕНЮ ---")
+        print("1. Сложить матрицы")
+        print("2. Масштабировать (на число)")
+        print("3. Произведение двух матриц")
+        print("4. Изменить ориентацию (транспонирование)")
+        print("5. Найти детерминант")
+        print("6. Обратная матрица")
+        print("0. Выход")
 
-        if choice == '1':
-            print("For example: 2 2\nEnter first matrix:")
-            A = read_matrix()
-            print("Enter second matrix:")
-            B = read_matrix()
-            result = A.add(B)
-            if result:
-                print("The result is:")
-                result.print_matrix()
+        user_choice = input("Выберите пункт: ")
 
-        elif choice == '2':
-            A = read_matrix()
-            c = float(input("Enter constant: > "))
-            result = A.multiply_constant(c)
-            print("The result is:")
-            result.print_matrix()
+        if user_choice == '1':
+            a, b = get_user_matrix(), get_user_matrix()
+            res = a.add_matrix(b)
+            if res:
+                print("Результат сложения:")
+                res.show_matrix()
 
-        elif choice == '3':
-            print("Enter first matrix:")
-            A = read_matrix()
-            print("Enter second matrix:")
-            B = read_matrix()
-            result = A.multiply_matrix(B)
-            if result:
-                print("The result is:")
-                result.print_matrix()
+        elif user_choice == '2':
+            a = get_user_matrix()
+            while True:
+                try:
+                    num = float(input("Множитель: "))
+                    break
+                except ValueError:
+                    print("Введите число.")
+            res = a.multiply_by_scalar(num)
+            print("Матрица после умножения:")
+            res.show_matrix()
 
-        elif choice == '4':
-            print("Transpose modes:\n1. Main diagonal\n2. Side diagonal\n3. Vertical\n4. Horizontal")
-            mode = int(input("Your choice: > "))
-            A = read_matrix()
-            result = A.transpose(mode)
-            if result:
-                print("The result is:")
-                result.print_matrix()
+        elif user_choice == '3':
+            a, b = get_user_matrix(), get_user_matrix()
+            res = a.multiply_matrices(b)
+            if res:
+                print("Результат перемножения:")
+                res.show_matrix()
 
-        elif choice == '5':
-            A = read_matrix()
-            det = A.determinant()
-            if det is not None:
-                print("The result is:")
-                print(round(det, 2))
+        elif user_choice == '4':
+            print("Режимы: 1-Главная, 2-Побочная, 3-Лево/Право, 4-Верх/Низ")
+            try:
+                m_type = int(input("Режим: "))
+                mat = get_user_matrix()
+                res = mat.apply_rotation(m_type)
+                if res:
+                    print("Обновленная матрица:")
+                    res.show_matrix()
+            except ValueError:
+                print("Требуется номер режима.")
 
-        elif choice == '6':
-            A = read_matrix()
-            inv = A.inverse()
-            if inv:
-                print("The result is:")
-                inv.print_matrix()
+        elif user_choice == '5':
+            mat = get_user_matrix()
+            d = mat.calculate_determinant()
+            if d is not None:
+                print(f"Детерминант равен: {round(d, 4)}")
 
-        elif choice == '0':
+        elif user_choice == '6':
+            mat = get_user_matrix()
+            res = mat.invert()
+            if res:
+                print("Инвертированная матрица:")
+                res.show_matrix()
+
+        elif user_choice == '0':
+            print("Завершение работы...")
             break
-
         else:
-            print("Invalid option")
+            print("Неизвестная команда.")
 
 
 if __name__ == "__main__":
-    main()
+    start_console_interface()
