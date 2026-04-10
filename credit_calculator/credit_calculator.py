@@ -1,99 +1,110 @@
 import math
 import argparse
+import sys
 
 
-class CreditCalculator:
+class CreditCalc:
     def __init__(self, args):
-        self.type = args.type
-        self.principal = args.principal
-        self.payment = args.payment
-        self.periods = args.periods
-        self.interest = args.interest
+        self.calc_type = args.type
+        self.total_credit = args.principal
+        self.monthly_sum = args.payment
+        self.months_count = args.periods
+        self.yearly_interest = args.interest
 
-        if self.interest is None or self.interest <= 0:
-            print("Incorrect parameters")
-            exit()
+        # Валидация процента
+        if self.yearly_interest is None or self.yearly_interest <= 0:
+            print("Параметры введены неверно.")
+            sys.exit()
 
-        self.i = self.interest / (12 * 100)
+        # Месячная ставка (i)
+        self.i = self.yearly_interest / (12 * 100)
+
+    def _print_extra(self, total_spent, base_sum):
+        print(f"Переплата: {int(total_spent - base_sum)}")
 
     def calc_annuity_payment(self):
-        a = self.principal * (self.i * (1 + self.i) ** self.periods) / (
-            (1 + self.i) ** self.periods - 1
-        )
-        a = math.ceil(a)
-        print(f"Your annuity payment = {a}!")
-        print(f"Overpayment = {int(a * self.periods - self.principal)}")
+        # Поиск ежемесячного взноса (A)
+        pow_val = math.pow(1 + self.i, self.months_count)
+        pay = self.total_credit * (self.i * pow_val) / (pow_val - 1)
+        pay = math.ceil(pay)
+        print(f"Ваш платеж на каждый месяц = {pay}")
+        self._print_extra(pay * self.months_count, self.total_credit)
 
-    def calc_principal(self):
-        p = self.payment / (
-            (self.i * (1 + self.i) ** self.periods) / ((1 + self.i) ** self.periods - 1)
-        )
-        p = math.floor(p)
-        print(f"Your loan principal = {p}!")
-        print(f"Overpayment = {int(self.payment * self.periods - p)}")
+    def calc_principal_sum(self):
+        # Поиск основной суммы (P)
+        pow_val = math.pow(1 + self.i, self.months_count)
+        p_value = self.monthly_sum / ((self.i * pow_val) / (pow_val - 1))
+        p_value = math.floor(p_value)
+        print(f"Сумма займа составит: {p_value}")
+        self._print_extra(self.monthly_sum * self.months_count, p_value)
 
-    def calc_periods(self):
-        n = math.log(self.payment / (self.payment - self.i * self.principal), 1 + self.i)
-        n = math.ceil(n)
+    def calc_duration(self):
+        # Поиск срока (n)
+        inner_log = self.monthly_sum / (self.monthly_sum - self.i * self.total_credit)
+        n_months = math.ceil(math.log(inner_log, 1 + self.i))
 
-        years = n // 12
-        months = n % 12
-
-        parts = []
+        years, remains = divmod(n_months, 12)
+        output_parts = []
         if years > 0:
-            parts.append(f"{years} year" if years == 1 else f"{years} years")
-        if months > 0:
-            parts.append(f"{months} month" if months == 1 else f"{months} months")
+            y_word = "год" if years == 1 else "года" if 2 <= years <= 4 else "лет"
+            output_parts.append(f"{years} {y_word}")
+        if remains > 0:
+            m_word = "месяц" if remains == 1 else "месяца" if 2 <= remains <= 4 else "месяцев"
+            output_parts.append(f"{remains} {m_word}")
 
-        print(f"It will take {' and '.join(parts)} to repay this loan!")
-        print(f"Overpayment = {int(self.payment * n - self.principal)}")
+        print(f"Для погашения нужно: {' и '.join(output_parts)}")
+        self._print_extra(self.monthly_sum * n_months, self.total_credit)
 
-    def calc_diff(self):
-        total = 0
-        for m in range(1, self.periods + 1):
-            d = self.principal / self.periods + self.i * (
-                self.principal - self.principal * (m - 1) / self.periods
-            )
-            d = math.ceil(d)
-            total += d
-            print(f"Month {m}: payment is {d}")
-        print(f"Overpayment = {int(total - self.principal)}")
+    def calc_diff_payments(self):
+        # Дифференцированная схема
+        total_payout = 0
+        for m in range(1, self.months_count + 1):
+            # Формула: Dm = P/n + i*(P - P*(m-1)/n)
+            dm = (self.total_credit / self.months_count) + \
+                 self.i * (self.total_credit - (self.total_credit * (m - 1) / self.months_count))
+            dm = math.ceil(dm)
+            total_payout += dm
+            print(f"Месяц {m}: выплата {dm}")
 
-    def validate(self):
-        params = [self.principal, self.payment, self.periods, self.interest]
-        if any(x is not None and x < 0 for x in params):
+        self._print_extra(total_payout, self.total_credit)
+
+    def is_data_correct(self):
+        # Проверка на отрицательные значения
+        checks = [self.total_credit, self.monthly_sum, self.months_count, self.yearly_interest]
+        if any(v is not None and v < 0 for v in checks):
             return False
 
-        if self.type == "diff" and self.payment is not None:
+        # Условие для дифференцированных платежей (нельзя передавать payment)
+        if self.calc_type == "diff" and self.monthly_sum is not None:
             return False
 
-        count = sum(x is not None for x in [self.principal, self.payment, self.periods])
-        if count < 2:
+        # Должно быть как минимум 4 параметра (включая interest и type)
+        params = [self.total_credit, self.monthly_sum, self.months_count]
+        if sum(1 for p in params if p is not None) < 2:
             return False
 
         return True
 
-    def run(self):
-        if not self.validate():
-            print("Incorrect parameters")
+    def run_calculation(self):
+        if not self.is_data_correct():
+            print("Неправильные параметры.")
             return
 
-        if self.type == "annuity":
-            if self.payment is None:
+        if self.calc_type == "annuity":
+            if self.monthly_sum is None:
                 self.calc_annuity_payment()
-            elif self.principal is None:
-                self.calc_principal()
-            elif self.periods is None:
-                self.calc_periods()
-
-        elif self.type == "diff":
-            self.calc_diff()
+            elif self.total_credit is None:
+                self.calc_principal_sum()
+            elif self.months_count is None:
+                self.calc_duration()
+        elif self.calc_type == "diff":
+            self.calc_diff_payments()
         else:
-            print("Incorrect parameters")
+            print("Тип платежа указан неверно.")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="Инструмент для расчета кредита")
 
     parser.add_argument("--type", choices=["annuity", "diff"])
     parser.add_argument("--principal", type=float)
@@ -101,7 +112,6 @@ if __name__ == "__main__":
     parser.add_argument("--periods", type=int)
     parser.add_argument("--interest", type=float)
 
-    args = parser.parse_args()
-
-    calc = CreditCalculator(args)
-    calc.run()
+    input_data = parser.parse_args()
+    app = CreditCalc(input_data)
+    app.run_calculation()
